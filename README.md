@@ -1,6 +1,6 @@
 # 🚀 AI Hackathon Curation Agent
 
-An intelligent agent that automatically curates hackathons from your email newsletters, evaluates them using AI, and posts the best ones to Twitter.
+An intelligent agent that automatically curates hackathons from your email newsletters, evaluates them using AI (Groq – Qwen/LLaMA OSS models), sends you the best picks via [Resend](https://resend.com), and posts them to Twitter.
 
 🌐 [webclub.nitk.ac.in/hackclub_nitk](https://webclub.nitk.ac.in/hackclub_nitk)
 
@@ -17,11 +17,12 @@ An intelligent agent that automatically curates hackathons from your email newsl
 ## 🎯 What It Does
 
 1. **Email Processing**: Monitors Gmail for Hackathons with a specific label.
-2. **AI Analysis and Curation**: Uses Google Gemini along with Grouding with Google Search to analyze hackathon URLs in real-time. Automatically extracts hackathon details (dates, prizes, themes, legitimacy) and curates them based on your criteria.
+2. **AI Analysis and Curation**: Uses Groq API with open-source models (Qwen, LLaMA) to analyze hackathon URLs. Automatically extracts hackathon details (dates, prizes, themes, legitimacy) and curates them based on your criteria.
 3. **Storage**: Stores approved hackathons in Google Sheets with duplicate detection.
 4. **Social Sharing**: Automatically posts curated hackathons to Twitter.
-5. **Reporting**: Sends a summary email to the configured recipients.
-6. **Automated**: Runs via GitHub Actions.
+5. **Email Digest**: Sends a beautifully formatted email with the best curated hackathons via Resend.
+6. **Reporting**: Sends a summary email to the configured recipients.
+7. **Automated**: Runs via GitHub Actions.
 
 ## 🚀 Quick Start
 
@@ -49,9 +50,10 @@ Follow the instructions in [OAUTH_SETUP_GUIDE.md](OAUTH_SETUP_GUIDE.md)
 - Set up filters to automatically label incoming Hackathons
 - Or use a different label name and set `HACKATHON_EMAIL_LABEL` variable
 
-#### 2. Google Gemini API
-1. Go to Google AI Studio and create an API key.
-2. Add the API key to GitHub Secrets as GEMINI_API_KEY.
+#### 2. Groq API
+1. Go to [Groq Console](https://console.groq.com) and create an API key.
+2. Add the API key to GitHub Secrets as `GROQ_API_KEY`.
+3. Optionally set `GROQ_MODEL` (defaults to `qwen-2.5-32b`). Other options: `llama-3.3-70b-versatile`, `qwen-2.5-coder-32b`.
 
 #### 3. Google Sheets API
 
@@ -70,18 +72,28 @@ Follow the instructions in [OAUTH_SETUP_GUIDE.md](OAUTH_SETUP_GUIDE.md)
 3. Generate API keys and tokens
 4. Add the API keys to GitHub Secrets as TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET
 
+#### 5. Resend (Email Digest)
+1. Sign up at [resend.com](https://resend.com) and create an API key.
+2. Add the API key to GitHub Secrets as `RESEND_API_KEY`.
+3. Add your recipient email to GitHub Secrets as `USER_EMAIL` (e.g., `rahulkate173@gmail.com`).
+4. Optionally set `RESEND_FROM_EMAIL` (defaults to `onboarding@resend.dev`). Use a verified domain in Resend for production.
+
 ### 🔧 Environment Variables
 
 #### Required Variables
 ```
 GMAIL_CREDENTIALS={"type":"service_account",...}  # Gmail API service account JSON
-GEMINI_API_KEY=your_gemini_api_key                # Google Gemini API key
+GROQ_API_KEY=your_groq_api_key                    # Groq API key
+GROQ_MODEL=qwen-2.5-32b                           # AI model (optional, default: qwen-2.5-32b)
 SHEETS_CREDENTIALS={"type":"service_account",...} # Google Sheets API service account JSON
 GOOGLE_SHEETS_ID=your_sheet_id_from_url          # Google Sheets spreadsheet ID
 TWITTER_API_KEY=your_api_key                      # Twitter API key
 TWITTER_API_SECRET=your_api_secret                # Twitter API secret
 TWITTER_ACCESS_TOKEN=your_access_token            # Twitter access token
 TWITTER_ACCESS_TOKEN_SECRET=your_access_token_secret
+RESEND_API_KEY=your_resend_api_key                # Resend API key
+USER_EMAIL=rahulkate173@gmail.com                  # Recipient email for digest
+RESEND_FROM_EMAIL=onboarding@resend.dev           # Sender address (optional)
 ```
 
 #### Optional Variables
