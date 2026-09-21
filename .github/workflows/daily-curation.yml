@@ -38,8 +38,9 @@ jobs:
       HACKATHON_EMAIL_LABEL: ${{ vars.HACKATHON_EMAIL_LABEL || 'Hackathons' }}
       HACKATHON_INDICATORS: ${{ vars.HACKATHON_INDICATORS || '' }}
       
-      # Google Gemini API
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      # Groq AI API
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL: ${{ vars.GROQ_MODEL || 'qwen-2.5-32b' }}
       
       # Google Sheets API
       SHEETS_CREDENTIALS: ${{ secrets.SHEETS_CREDENTIALS }}
@@ -57,6 +58,11 @@ jobs:
       HACKATHON_BATCH_DELAY: ${{ vars.HACKATHON_BATCH_DELAY || '1.0' }}
       SEND_SUMMARY_EMAIL: ${{ vars.SEND_SUMMARY_EMAIL || 'true' }}
       SUMMARY_EMAIL_RECIPIENTS: ${{ secrets.SUMMARY_EMAIL_RECIPIENTS || '' }}
+      
+      # Resend email configuration
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || 'onboarding@resend.dev' }}
+      USER_EMAIL: ${{ secrets.USER_EMAIL }}
     
     steps:
     - name: Checkout repository
@@ -149,8 +155,9 @@ jobs:
       HACKATHON_EMAIL_LABEL: ${{ vars.HACKATHON_EMAIL_LABEL || 'Hackathons' }}
       HACKATHON_INDICATORS: ${{ vars.HACKATHON_INDICATORS || '' }}
       
-      # Google Gemini API
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      # Groq AI API
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL: ${{ vars.GROQ_MODEL || 'qwen-2.5-32b' }}
       
       # Google Sheets API
       SHEETS_CREDENTIALS: ${{ secrets.SHEETS_CREDENTIALS }}
@@ -168,6 +175,11 @@ jobs:
       HACKATHON_BATCH_DELAY: ${{ vars.HACKATHON_BATCH_DELAY || '1.0' }}
       SEND_SUMMARY_EMAIL: ${{ vars.SEND_SUMMARY_EMAIL || 'false' }}
       SUMMARY_EMAIL_RECIPIENTS: ${{ secrets.SUMMARY_EMAIL_RECIPIENTS || '' }}
+      
+      # Resend email configuration
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || 'onboarding@resend.dev' }}
+      USER_EMAIL: ${{ secrets.USER_EMAIL }}
     
     steps:
     - name: Checkout repository
