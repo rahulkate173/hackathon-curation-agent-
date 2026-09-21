@@ -494,3 +494,157 @@ class EmailProcessor:
             'html': html_content,
             'text': text_content
         }
+
+    def send_best_hackathon_resend_email(
+        self,
+        hackathons: List[Dict],
+        results: Dict = None,
+    ) -> bool:
+        """
+        Send the best curated hackathon(s) via Resend to the configured user email.
+
+        Reads RESEND_API_KEY, USER_EMAIL, and RESEND_FROM_EMAIL from env vars.
+
+        Args:
+            hackathons: List of approved hackathon data dicts (sorted best-first is ideal).
+            results: Optional execution results dict for extra context.
+
+        Returns:
+            True if the email was sent successfully.
+        """
+        try:
+            import resend
+
+            resend_api_key = os.getenv("RESEND_API_KEY")
+            if not resend_api_key:
+                self.logger.warning("RESEND_API_KEY not set – skipping Resend email")
+                return False
+
+            user_email = os.getenv("USER_EMAIL")
+            if not user_email:
+                self.logger.warning("USER_EMAIL not set – skipping Resend email")
+                return False
+
+            from_email = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+
+            resend.api_key = resend_api_key
+
+            # Build HTML content
+            html_body = self._build_resend_html(hackathons, results)
+
+            subject = f"🏆 Your Best Curated Hackathons – {datetime.now().strftime('%b %d, %Y')}"
+
+            r = resend.Emails.send({
+                "from": from_email,
+                "to": user_email,
+                "subject": subject,
+                "html": html_body,
+            })
+
+            self.logger.info(f"✅ Resend email sent to {user_email} (id: {r.get('id', 'N/A') if isinstance(r, dict) else r})")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Failed to send Resend email: {e}")
+            return False
+
+    def _build_resend_html(self, hackathons: List[Dict], results: Dict = None) -> str:
+        """Build a polished HTML email body for the Resend hackathon digest."""
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%B %d, %Y at %I:%M %p")
+
+        # Sort hackathons by prize_amount_usd descending so best is first
+        sorted_hackathons = sorted(
+            hackathons,
+            key=lambda h: int(h.get("prize_amount_usd", 0) or 0),
+            reverse=True,
+        )
+
+        hackathon_cards = ""
+        for i, h in enumerate(sorted_hackathons):
+            badge = "⭐ TOP PICK" if i == 0 and len(sorted_hackathons) > 1 else ""
+            badge_html = f'<span style="background:#fbbf24;color:#1a1a2e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-left:8px;">{badge}</span>' if badge else ""
+            hackathon_cards += f"""
+            <div style="background:#1e1e30;border:1px solid #2d2d44;border-radius:12px;padding:24px;margin-bottom:16px;">
+                <h2 style="margin:0 0 8px 0;color:#e0e0e0;font-size:18px;">
+                    <a href="{h.get('link', '#')}" style="color:#818cf8;text-decoration:none;">{h.get('name', 'Hackathon')}</a>
+                    {badge_html}
+                </h2>
+                <table style="width:100%;border-collapse:collapse;margin:12px 0;">
+                    <tr>
+                        <td style="color:#9ca3af;padding:4px 16px 4px 0;font-size:13px;">💰 Prize</td>
+                        <td style="color:#f0f0f0;padding:4px 0;font-size:13px;font-weight:600;">{h.get('prizes', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td style="color:#9ca3af;padding:4px 16px 4px 0;font-size:13px;">📅 Dates</td>
+                        <td style="color:#f0f0f0;padding:4px 0;font-size:13px;">{h.get('dates', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td style="color:#9ca3af;padding:4px 16px 4px 0;font-size:13px;">🏷️ Theme</td>
+                        <td style="color:#f0f0f0;padding:4px 0;font-size:13px;">{h.get('theme', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td style="color:#9ca3af;padding:4px 16px 4px 0;font-size:13px;">🌐 Mode</td>
+                        <td style="color:#f0f0f0;padding:4px 0;font-size:13px;">{h.get('mode', 'N/A')}</td>
+                    </tr>
+                </table>
+                <a href="{h.get('link', '#')}" style="display:inline-block;background:#6366f1;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;margin-top:4px;">Apply Now →</a>
+            </div>
+            """
+
+        stats_html = ""
+        if results:
+            stats_html = f"""
+            <div style="background:#1e1e30;border-radius:10px;padding:16px 20px;margin-bottom:24px;display:flex;gap:24px;flex-wrap:wrap;">
+                <div style="text-align:center;min-width:80px;">
+                    <div style="font-size:24px;font-weight:700;color:#818cf8;">{results.get('emails_processed', 0)}</div>
+                    <div style="font-size:11px;color:#9ca3af;text-transform:uppercase;">Emails</div>
+                </div>
+                <div style="text-align:center;min-width:80px;">
+                    <div style="font-size:24px;font-weight:700;color:#34d399;">{results.get('hackathons_approved', 0)}</div>
+                    <div style="font-size:11px;color:#9ca3af;text-transform:uppercase;">Approved</div>
+                </div>
+                <div style="text-align:center;min-width:80px;">
+                    <div style="font-size:24px;font-weight:700;color:#fbbf24;">{results.get('hackathons_stored', 0)}</div>
+                    <div style="font-size:11px;color:#9ca3af;text-transform:uppercase;">Stored</div>
+                </div>
+            </div>
+            """
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin:0;padding:0;background:#0f0f1a;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+            <div style="max-width:600px;margin:0 auto;padding:32px 16px;">
+                <!-- Header -->
+                <div style="background:linear-gradient(135deg,#6366f1 0%,#a855f7 100%);border-radius:16px;padding:32px;text-align:center;margin-bottom:24px;">
+                    <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700;">🏆 Hackathon Curation Digest</h1>
+                    <p style="margin:8px 0 0;color:rgba(255,255,255,0.8);font-size:13px;">{timestamp}</p>
+                </div>
+
+                {stats_html}
+
+                <!-- Hackathons -->
+                <h3 style="color:#e0e0e0;font-size:15px;margin:0 0 16px 0;">
+                    {len(sorted_hackathons)} Hackathon{'s' if len(sorted_hackathons) != 1 else ''} Found
+                </h3>
+
+                {hackathon_cards if hackathon_cards else '<p style="color:#9ca3af;">No hackathons met the criteria this run.</p>'}
+
+                <!-- Footer -->
+                <div style="margin-top:32px;padding-top:16px;border-top:1px solid #2d2d44;text-align:center;">
+                    <p style="color:#6b7280;font-size:11px;margin:0;">
+                        Sent by Hackathon Curation Agent • Powered by Groq AI
+                    </p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        return html
+

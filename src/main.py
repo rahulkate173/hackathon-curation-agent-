@@ -111,10 +111,10 @@ class HackathonCurationAgent:
 
         self.logger = logging.getLogger(__name__)
         
-        gemini_api_works = self.hackathon_analyzer.test_gemini_api()
-        if not gemini_api_works:
-            self.logger.error("Gemini API test failed")
-            raise Exception("Gemini API test failed")
+        ai_api_works = self.hackathon_analyzer.test_ai_connection()
+        if not ai_api_works:
+            self.logger.error("Groq API test failed")
+            raise Exception("Groq API test failed")
 
     def _parse_email_recipients(self) -> List[str]:
         """Parse summary email recipients from environment variable."""
@@ -182,7 +182,7 @@ class HackathonCurationAgent:
     def check_required_env_vars(self):
         """Check if all required environment variables are set."""
         required_vars = {
-            "GEMINI_API_KEY": "Required for AI analysis of hackathons",
+            "GROQ_API_KEY": "Required for AI analysis of hackathons (Groq)",
             # Add other required variables here as needed
         }
 
@@ -312,6 +312,15 @@ class HackathonCurationAgent:
             if self.send_summary_email and self.summary_email_recipients:
                 self.logger.info(f"📧 Sending summary email with {len(new_hackathons)} new hackathons (filtered from {len(hackathons)} total)")
                 await self.send_summary_email_report(results, new_hackathons)
+
+            # Step 8: Send best hackathon digest via Resend
+            if new_hackathons:
+                self.logger.info(f"📬 Sending Resend digest email with {len(new_hackathons)} hackathons...")
+                self.email_processor.send_best_hackathon_resend_email(new_hackathons, results)
+            elif hackathons:
+                # Even if all were duplicates in storage, still email the curated list
+                self.logger.info(f"📬 Sending Resend digest email with {len(hackathons)} hackathons (all duplicates in storage)...")
+                self.email_processor.send_best_hackathon_resend_email(hackathons, results)
 
             # Generate summary
             results["summary"] = self.generate_summary(results)

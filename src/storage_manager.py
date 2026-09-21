@@ -24,7 +24,7 @@ class StorageManager:
     1. filter_existing_links() - called BEFORE AI analysis to reduce prompt size
     2. add_hackathons_batch() - called AFTER AI analysis (no duplicate checking needed)
     
-    This reduces the number of URLs sent to Gemini API by filtering out existing links first.
+    This reduces the number of URLs sent to the AI API by filtering out existing links first.
     """
     def __init__(self, spreadsheet_id: str = None):
         """

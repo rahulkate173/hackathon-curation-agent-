@@ -7,28 +7,23 @@ import yaml
 import asyncio
 import time
 import random
-from google import genai
-from google.genai import types
+from groq import Groq
 
 
 class HackathonAnalyzer:
     def __init__(self, criteria_file: str = None):
-        """Initialize AI-powered hackathon analyzer with Gemini API and Google Search grounding."""
+        """Initialize AI-powered hackathon analyzer with Groq API (Qwen / OSS models)."""
         self.logger = logging.getLogger(__name__)
 
-        # Initialize Gemini client
-        api_key = os.getenv("GEMINI_API_KEY")
+        # Initialize Groq client
+        api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
-            raise ValueError("GEMINI_API_KEY environment variable is required")
+            raise ValueError("GROQ_API_KEY environment variable is required")
 
-        self.client = genai.Client(api_key=api_key)
+        self.client = Groq(api_key=api_key)
 
-        # Configure grounding tool
-        self.grounding_tool = types.Tool(google_search=types.GoogleSearch())
-
-        self.config = types.GenerateContentConfig(
-            tools=[self.grounding_tool]
-        )
+        # Model configuration – defaults to qwen-2.5-32b but can be overridden
+        self.model = os.getenv("GROQ_MODEL", "qwen-2.5-32b")
 
         # Load criteria for evaluation
         if not criteria_file:
@@ -80,7 +75,7 @@ class HackathonAnalyzer:
                 
                 # If we get here, the call was successful
                 if attempt > 0:
-                    self.logger.info(f"✅ Gemini API call succeeded after {attempt} retries")
+                    self.logger.info(f"✅ Groq API call succeeded after {attempt} retries")
                 
                 return result
                 
@@ -94,15 +89,17 @@ class HackathonAnalyzer:
                     "INTERNAL" in error_str or
                     "internal error" in error_str.lower() or
                     "timeout" in error_str.lower() or
-                    "temporarily unavailable" in error_str.lower()
+                    "temporarily unavailable" in error_str.lower() or
+                    "rate_limit" in error_str.lower() or
+                    "429" in error_str
                 )
                 
                 if not is_retryable or attempt >= max_retries:
                     # Don't retry for non-retryable errors or if max retries reached
                     if attempt >= max_retries:
-                        self.logger.error(f"❌ Gemini API call failed after {max_retries} retries: {e}")
+                        self.logger.error(f"❌ Groq API call failed after {max_retries} retries: {e}")
                     else:
-                        self.logger.error(f"❌ Gemini API call failed with non-retryable error: {e}")
+                        self.logger.error(f"❌ Groq API call failed with non-retryable error: {e}")
                     raise e
                 
                 # Calculate delay for next retry
@@ -113,7 +110,7 @@ class HackathonAnalyzer:
                     delay += random.uniform(0, delay * 0.1)  # Add up to 10% jitter
                 
                 self.logger.warning(
-                    f"⚠️ Gemini API call failed (attempt {attempt + 1}/{max_retries + 1}): {e}. "
+                    f"⚠️ Groq API call failed (attempt {attempt + 1}/{max_retries + 1}): {e}. "
                     f"Retrying in {delay:.2f} seconds..."
                 )
                 
@@ -146,11 +143,11 @@ class HackathonAnalyzer:
         total_analyzed = 0
         total_rejected = 0
         failed_batches = 0
+        total_batches = (len(urls) + self.batch_size - 1) // self.batch_size
 
         for i in range(0, len(urls), self.batch_size):
             batch_urls = urls[i:i + self.batch_size]
             batch_num = (i // self.batch_size) + 1
-            total_batches = (len(urls) + self.batch_size - 1) // self.batch_size
             
             self.logger.info(f"📦 Processing batch {batch_num}/{total_batches} with {len(batch_urls)} URLs")
             
@@ -186,10 +183,8 @@ class HackathonAnalyzer:
         for hackathon in all_hackathons:
             hackathon["analyzed_at"] = current_time
             hackathon["ai_metadata"] = {
-                "search_queries": [],
-                "grounding_chunks": 0,
-                "grounding_supports": 0,
-                "ai_search_performed": True,
+                "model": self.model,
+                "provider": "groq",
                 "batch_processing": True,
                 "total_batches": total_batches,
                 "failed_batches": failed_batches
@@ -229,15 +224,26 @@ class HackathonAnalyzer:
 
             # Use retry helper for API call
             response = self._retry_with_exponential_backoff(
-                lambda: self.client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=prompt,
-                    config=self.config,
+                lambda: self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an AI hackathon analyst. You analyze hackathon URLs and return structured JSON data. Always respond with valid JSON only."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    temperature=0.3,
+                    max_tokens=4096,
+                    response_format={"type": "json_object"},
                 )
             )
 
-            # Parse JSON response - extract JSON from response text
-            response_text = response.text.strip()
+            # Parse JSON response
+            response_text = response.choices[0].message.content.strip()
             self.logger.info(f"Batch LLM Response: {response_text}")
             
             # Try to find JSON in the response
@@ -291,9 +297,9 @@ EVALUATION CRITERIA:
 - Must be a legitimate hackathon (no scams, MLMs, or suspicious events)
 - Must be open to Indian participants
 
-For each URL, search and extract the hackathon information. ONLY include hackathons that meet ALL criteria.
+For each URL, extract the hackathon information based on your knowledge. ONLY include hackathons that meet ALL criteria.
 
-Return your response as a valid JSON object (wrap in ```json code block if needed) with this EXACT structure:
+Return your response as a valid JSON object with this EXACT structure:
 
 {{
     "total_analyzed": {len(urls)},
@@ -326,10 +332,10 @@ AI ANALYSIS GUIDELINES:
    - never include a URL in tweet text; link will be appended separately
    - keep tweet field <= 220 characters so final link can fit safely
 6. Rotate tweet opening/line-break style across these examples (guidance only, do not copy exactly):
-   a) "{{name}} is live for builders chasing {{prize}}.\n\nbuild {{hook}}.\n\nruns {{human-friendly dates}}"
-   b) "builders, {{name}} looks worth a look.\n\n{{prize}} in prizes. runs {{human-friendly dates}}."
-   c) "{{name}} is calling builders working on {{theme}}.\n\nprize: {{prize}}\ndates: {{human-friendly dates}}"
-   d) "new one for {{theme}} builders: {{name}}.\n\nwin {{prize}} by building {{hook}}.\n\ndates: {{human-friendly dates}}"
+   a) "{{name}} is live for builders chasing {{prize}}.\\n\\nbuild {{hook}}.\\n\\nruns {{human-friendly dates}}"
+   b) "builders, {{name}} looks worth a look.\\n\\n{{prize}} in prizes. runs {{human-friendly dates}}."
+   c) "{{name}} is calling builders working on {{theme}}.\\n\\nprize: {{prize}}\\ndates: {{human-friendly dates}}"
+   d) "new one for {{theme}} builders: {{name}}.\\n\\nwin {{prize}} by building {{hook}}.\\n\\ndates: {{human-friendly dates}}"
 7. If you can't find clear information, don't include the hackathon
 8. This is batch {len(urls)} of {self.batch_size} - focus on quality analysis for each URL
 
@@ -337,79 +343,26 @@ Apply your AI intelligence to extract accurate information and evaluate criteria
 """
         return prompt
 
-    def _extract_ai_metadata(self, response) -> Dict[str, Any]:
-        """Extract AI processing metadata from Gemini response."""
-        try:
-            if hasattr(response, "candidates") and response.candidates:
-                candidate = response.candidates[0]
-                if hasattr(candidate, "grounding_metadata"):
-                    metadata = candidate.grounding_metadata
-                    return {
-                        "search_queries": getattr(metadata, "web_search_queries", []),
-                        "grounding_chunks": len(
-                            getattr(metadata, "grounding_chunks", [])
-                        ),
-                        "grounding_supports": len(
-                            getattr(metadata, "grounding_supports", [])
-                        ),
-                        "ai_search_performed": True,
-                    }
-
-            return {
-                "search_queries": [],
-                "grounding_chunks": 0,
-                "grounding_supports": 0,
-                "ai_search_performed": False,
-            }
-
-        except Exception as e:
-            self.logger.warning(f"Could not extract AI metadata: {e}")
-            return {
-                "search_queries": [],
-                "grounding_chunks": 0,
-                "grounding_supports": 0,
-                "ai_search_performed": False,
-            }
-
     def test_ai_connection(self) -> bool:
         """Test AI connection and capabilities."""
         try:
             # Use retry helper for API call
             self._retry_with_exponential_backoff(
-                lambda: self.client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents="What makes a hackathon legitimate and valuable for participants?",
-                    config=self.config,
+                lambda: self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": "What makes a hackathon legitimate and valuable for participants? Reply briefly."
+                        }
+                    ],
+                    max_tokens=256,
                 )
             )
 
-            self.logger.info("🤖 AI connection test successful")
+            self.logger.info(f"🤖 AI connection test successful (model: {self.model})")
             return True
 
         except Exception as e:
             self.logger.error(f"AI connection test failed: {e}")
-            return False
-
-    def test_gemini_api(self) -> bool:
-        """Test the Google Search grounding tool specifically."""
-        try:
-            test_prompt = "What is the current date?"
-            
-            # self.logger.info("🔍 Testing Google Search grounding tool...")
-            
-            # Use retry helper for API call
-            response = self._retry_with_exponential_backoff(
-                lambda: self.client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=test_prompt,
-                    config=self.config,
-                )
-            )
-            
-            self.logger.info(f"Response: {response.text}")
-            return True
-        
-                
-        except Exception as e:
-            self.logger.error(f"❌ Grounding tool test failed: {e}")
             return False
